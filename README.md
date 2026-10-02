@@ -11,7 +11,7 @@ Your Claude plan usage, always visible: a one-line band **directly above the pro
 - **Context**: how full this chat's context window is, in tokens
 - **Model** and this session's **cost** at API prices (you aren't charged this on a Pro/Max plan)
 
-Each figure has a small progress ring (pie glyphs `○ ◔ ◑ ◕ ●` in the terminal) that turns **yellow at 70%** and **red at 90%**. The band updates live: every 15 seconds, after each step Claude takes, and after every reply. It always stays on one line: in a narrow window it shortens the reset times to `↻ 1:19 PM`, then drops the cost, then the token count, then the model.
+Each figure has a small progress ring (pie glyphs `○ ◔ ◑ ◕ ●` in the terminal) that turns **yellow at 70%** and **red at 90%**. The band updates live: every 15 seconds, after each step Claude takes, and after every reply. It always stays on one line: in a narrow window it shortens the reset times to `↻ 1:19 PM`, then drops the token count, then the model. The cost always stays.
 
 Works in the **Claude desktop app (Code tab)** on macOS and Windows, and in **`claude` in the terminal**.
 

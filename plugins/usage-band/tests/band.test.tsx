@@ -160,7 +160,7 @@ test('without the option, the weekly reset is detected from the last drop', asyn
   await ui.unmount()
 })
 
-test('a narrow band drops the cost and token counts instead of wrapping', async ($, on) => {
+test('a narrow band keeps the cost and drops the token count instead of wrapping', async ($, on) => {
   on('session.usage', () => ({
     value: {
       startedAt: 0,
@@ -177,7 +177,7 @@ test('a narrow band drops the cost and token counts instead of wrapping', async 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 50 } })
   expect(await ui.find({ type: 'Text', text: /^16%$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^34%$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /\$11\.15/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\$11\.15/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^340k/ })).toBeUndefined()
   await ui.unmount()
 })

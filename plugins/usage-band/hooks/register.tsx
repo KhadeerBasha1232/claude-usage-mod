@@ -343,8 +343,8 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // Fit one line: shorten the reset phrases to "↻", then drop the cost, then the
-    // context tokens, then the model, then the reset phrases altogether.
+    // Fit one line, always keeping the cost: shorten the reset phrases to "↻",
+    // then drop the context tokens, then the model, then the reset phrases.
     const GAP = 2
     const SEP_WIDTH = 1 + 2 * GAP
     const costText = cost != null ? `$${cost.toFixed(2)}` : ""
@@ -362,10 +362,9 @@ export const register: Register = (on, options) => {
     const plans: Plan[] = [
       { detail: 0, cost: true, tokens: true, model: true },
       { detail: 1, cost: true, tokens: true, model: true },
-      { detail: 1, cost: false, tokens: true, model: true },
-      { detail: 1, cost: false, tokens: false, model: true },
-      { detail: 1, cost: false, tokens: false, model: false },
-      { detail: 2, cost: false, tokens: false, model: false },
+      { detail: 1, cost: true, tokens: false, model: true },
+      { detail: 1, cost: true, tokens: false, model: false },
+      { detail: 2, cost: true, tokens: false, model: false },
     ]
     const plan = plans.find(p => width(p) <= cols) ?? plans[plans.length - 1]
 
