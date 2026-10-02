@@ -6,7 +6,7 @@ Your Claude plan usage, always visible: a one-line band **directly above the pro
 ◔ 5h 20% resets 1:19 PM  │  ◑ Week 50% resets Sat 2:30 PM  │  ○ Context 40% 404k / 1M  │  Opus 5.5 · $13.24
 ```
 
-- **5h**: your 5-hour session limit, with when it resets and how long until then
+- **5h**: your 5-hour session limit, with the time it resets
 - **Week**: your weekly limit, with its reset time
 - **Context**: how full this chat's context window is, in tokens
 - **Model** and this session's **cost** at API prices (you aren't charged this on a Pro/Max plan)
