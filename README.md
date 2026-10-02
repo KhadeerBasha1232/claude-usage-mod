@@ -35,6 +35,8 @@ claude plugin install usage-band@claude-usage-mod
 
 **Requires** Claude Code with mod support (v2.1.286 or later).
 
+**Tip:** [turn on auto-update](#turn-on-auto-update-recommended) so you get new versions without doing anything.
+
 ## Where the numbers come from
 
 | Figure | Source |
@@ -62,6 +64,31 @@ Set it with:
 ```
 
 ## Update
+
+### Turn on auto-update (recommended)
+
+Claude Code doesn't auto-update third-party marketplaces unless you ask it to. Turn it on once and you'll get new versions by yourself:
+
+1. In a Claude Code chat, run `/plugin`.
+2. Go to the **Marketplaces** tab and select **claude-usage-mod**.
+3. Select **Enable auto-update**.
+
+In the desktop app, use the same `/plugin` command in a Code tab chat.
+
+Or add `"autoUpdate": true` to the marketplace's entry in `~/.claude/settings.json`:
+
+```json
+"extraKnownMarketplaces": {
+  "claude-usage-mod": {
+    "source": { "source": "github", "repo": "KhadeerBasha1232/claude-usage-mod" },
+    "autoUpdate": true
+  }
+}
+```
+
+With auto-update on, Claude Code checks for a new version a few minutes after your first message in a chat. When it finds one, it shows `Plugin updated: usage-band · Run /reload-plugins to apply`, and your next chat loads it.
+
+### Update by hand
 
 ```
 /plugin marketplace update claude-usage-mod
