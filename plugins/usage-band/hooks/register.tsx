@@ -2,7 +2,7 @@ import type { Register } from 'claude-code'
 
 // One line above the prompt with every usage figure:
 //
-//   ◔ 5h 7% ↻ 1:19 PM · 4h 39m │ ◑ Week 46% ↻ Sat 2:30 PM · 1d 5h │ ○ Context 16% 164k/1M │ Opus 5.5 · $2.14
+//   ◔ 5h 7% resets in 4h 39m    ◑ Week 46% resets Sat 2:30 PM    ○ Context 16% 164k / 1M    $2.14
 //
 // The rings are SVG on the desktop and pie glyphs in the terminal.
 //
@@ -76,13 +76,6 @@ function compact(n: number) {
   if (n >= 1_000_000) return `${+(n / 1_000_000).toFixed(1)}M`
   if (n >= 1000) return `${Math.round(n / 1000)}k`
   return `${n}`
-}
-
-function prettyModel(id: string) {
-  const m = id.replace(/\[.*\]$/, '').match(/claude-([a-z]+)-(\d+)(?:-(\d+))?/)
-  if (!m) return id
-  const name = m[1][0].toUpperCase() + m[1].slice(1)
-  return m[3] && m[3].length <= 2 ? `${name} ${m[2]}.${m[3]}` : `${name} ${m[2]}`
 }
 
 // The next moment matching a weekly time such as "Sat 14:30", "saturday 2:30 pm"
@@ -244,69 +237,34 @@ export const register: Register = (on, options) => {
     if (!limits.length) limits = await appLimits($, now, weeklyReset)
 
     const ctx = usage.context
-    let model = ''
-    try {
-      model = prettyModel(await $.session.model())
-    } catch {}
+    const cost = usage.cost?.usd
 
-    // Narrow windows drop the countdowns, then the token counts, to stay on one line.
-    const cols = e.props.bodyColumns ?? 200
-    const showCountdown = cols >= 120
-    const showTokens = cols >= 95
-
-    const els = $.ui.resolve(e) as any
-    const { Box, Text } = els
-    const Svg = e.surface === 'desktop' ? els.Svg : undefined
-
-    const sep = (key: string) => <Text key={key} dimColor>│</Text>
-
-    const meter = (key: string, label: string, pct: number, detail: any[]) => {
-      const color = colorFor(pct)
-      const ring = Svg
-        ? <Svg key="ring" source={ringSvg(pct)} alt={`${label} ${Math.round(pct)}% used`} width={14} height={14} />
-        : <Text key="ring" color={color}>{pieGlyph(pct)}</Text>
-      return (
-        <Box key={key} flexDirection="row" gap={1} flexShrink={0} alignItems="center">
-          {ring}
-          <Text bold>{label}</Text>
-          <Text color={color} bold>{`${Math.round(pct)}%`}</Text>
-          {detail}
-        </Box>
-      )
-    }
-
-    const parts: any[] = []
+    type Segment = { key: string; label: string; pct: number; details: string[] }
+    const segments: Segment[] = []
 
     for (const l of limits) {
-      const detail: any[] = []
+      const tilde = l.isEstimate ? "~" : ""
+      let details: string[] = []
       if (l.resetsAt != null) {
-        const tilde = l.isEstimate ? '~' : ''
-        detail.push(<Text key="at" dimColor>{`↻ ${tilde}${clock(l.resetsAt, now)}`}</Text>)
-        if (showCountdown) detail.push(<Text key="in" dimColor>{`· ${tilde}${duration(l.resetsAt - now)}`}</Text>)
-      } else if (l.key === 'five_hour') {
-        detail.push(<Text key="at" dimColor>↻ starts with your next message</Text>)
+        // The 5-hour window reads best as a countdown, the weekly one as a day and time.
+        details = l.key === "five_hour"
+          ? [`resets in ${tilde}${duration(l.resetsAt - now)}`, `${tilde}${duration(l.resetsAt - now)}`]
+          : [`resets ${tilde}${clock(l.resetsAt, now)}`, `${tilde}${clock(l.resetsAt, now)}`]
+      } else if (l.key === "five_hour") {
+        details = ["starts on your next message", "next message"]
       }
-      if (parts.length) parts.push(sep(`sep-${l.key}`))
-      parts.push(meter(l.key, l.label, l.pct, detail))
+      segments.push({ key: l.key, label: l.label, pct: l.pct, details })
     }
 
     if (ctx?.percent != null) {
-      const detail = showTokens && ctx.tokens != null
-        ? [<Text key="tok" dimColor>{`${compact(ctx.tokens)}/${compact(ctx.window)}`}</Text>]
-        : []
-      if (parts.length) parts.push(sep('sep-ctx'))
-      parts.push(meter('context', 'Context', ctx.percent, detail))
+      const tokens = ctx.tokens != null ? `${compact(ctx.tokens)} / ${compact(ctx.window)}` : ""
+      segments.push({ key: "context", label: "Context", pct: ctx.percent, details: tokens ? [tokens] : [] })
     }
 
-    const tail = [model, usage.cost?.usd != null ? `$${usage.cost.usd.toFixed(2)}` : '']
-      .filter(Boolean)
-      .join(' · ')
-    if (tail) {
-      if (parts.length) parts.push(sep('sep-tail'))
-      parts.push(<Text key="tail" dimColor>{tail}</Text>)
-    }
+    const els = $.ui.resolve(e) as any
+    const { Box, Text } = els
 
-    if (!parts.length) {
+    if (!segments.length) {
       return (
         <Box paddingX={1} width="100%" justifyContent="center">
           <Text dimColor>Usage appears after the first reply</Text>
@@ -314,8 +272,40 @@ export const register: Register = (on, options) => {
       )
     }
 
+    // Fit one line: drop the cost, then shorten the reset phrases, then drop the
+    // context tokens, then the reset phrases altogether.
+    const GAP = 4
+    const costText = cost != null ? `$${cost.toFixed(2)}` : ""
+    const width = (detailLevel: number, withCost: boolean, withTokens: boolean) =>
+      segments.reduce((sum, s, i) => {
+        const detail = s.key === "context" ? (withTokens ? s.details[0] ?? "" : "") : s.details[detailLevel] ?? ""
+        return sum + (i ? GAP : 0) + 2 + s.label.length + 1 + `${Math.round(s.pct)}%`.length + (detail ? 1 + detail.length : 0)
+      }, 0) + (withCost && costText ? GAP + costText.length : 0) + 2
+    const cols = e.props.bodyColumns ?? 200
+    const plans: Array<[number, boolean, boolean]> = [[0, true, true], [0, false, true], [1, false, true], [1, false, false], [2, false, false]]
+    const [detailLevel, withCost, withTokens] = plans.find(([d, c, t]) => width(d, c, t) <= cols) ?? plans[plans.length - 1]
+
+    const Svg = e.surface === "desktop" ? els.Svg : undefined
+
+    const parts = segments.map(s => {
+      const color = colorFor(s.pct)
+      const detail = s.key === "context" ? (withTokens ? s.details[0] : undefined) : s.details[detailLevel]
+      const ring = Svg
+        ? <Svg key="ring" source={ringSvg(s.pct)} alt={`${s.label} ${Math.round(s.pct)}% used`} width={14} height={14} />
+        : <Text key="ring" color={color}>{pieGlyph(s.pct)}</Text>
+      return (
+        <Box key={s.key} flexDirection="row" gap={1} flexShrink={0} alignItems="center">
+          {ring}
+          <Text dimColor>{s.label}</Text>
+          <Text color={color} bold>{`${Math.round(s.pct)}%`}</Text>
+          {detail ? <Text dimColor>{detail}</Text> : null}
+        </Box>
+      )
+    })
+    if (withCost && costText) parts.push(<Text key="cost" dimColor wrap="truncate-end">{costText}</Text>)
+
     return (
-      <Box flexDirection="row" flexWrap="nowrap" justifyContent="center" alignItems="center" width="100%" gap={2} paddingX={1} overflow="hidden">
+      <Box flexDirection="row" flexWrap="nowrap" justifyContent="center" alignItems="center" width="100%" gap={GAP} paddingX={1} overflow="hidden">
         {parts}
       </Box>
     )

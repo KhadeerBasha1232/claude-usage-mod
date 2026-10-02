@@ -6,7 +6,7 @@ const BAND = {
   props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 200 } as any,
 } as const
 
-test('engine limits show exact reset times, context, model and cost on one line', async ($, on) => {
+test('engine limits show exact reset times, context and cost on one line', async ($, on) => {
   const in2h = new Date(Date.now() + 2 * 3_600_000 + 60_000).toISOString()
   on('session.usage', () => ({
     value: {
@@ -26,10 +26,10 @@ test('engine limits show exact reset times, context, model and cost on one line'
     const ui = await $.ui.mount({ ...BAND, surface })
     expect(await ui.find({ type: 'Text', text: /^5h$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^58%$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^· 2h 1m$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^resets in 2h 1m$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Week$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^82k\/200k$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /Opus 5\.5 · \$2\.14/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^82k \/ 200k$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\$2\.14$/ })).toBeDefined()
     await ui.unmount()
   }
 })
@@ -55,9 +55,9 @@ test('falls back to the app usage file and estimates reset times', async ($, on)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /^7%$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^· ~4h 20m$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^resets in ~4h 20m$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^46%$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^141k\/1M$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^141k \/ 1M$/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -72,7 +72,7 @@ test('an expired 5-hour window reads 0% and waits for the next message', async (
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /^0%$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /starts with your next message/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /starts on your next message/ })).toBeDefined()
   await ui.unmount()
 })
 
@@ -124,7 +124,7 @@ test('the weekly_reset option gives an exact weekly reset time', { options: { we
   on('ui.render', () => null as any)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  const resets = (await ui.findAll({ type: 'Text', text: /^↻ / })).map(t => t.text)
+  const resets = (await ui.findAll({ type: 'Text', text: /^resets / })).map(t => t.text)
   const weekly = resets.find(t => /2:30/.test(t))
   expect(weekly).toBeDefined()
   expect(weekly).not.toMatch(/~/) // exact, so no "~"
@@ -148,6 +148,28 @@ test('without the option, the weekly reset is detected from the last drop', asyn
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /^12%$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^· ~5d$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^resets ~\w{3} / /* estimated day and time */ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a narrow band drops the cost and token counts instead of wrapping', async ($, on) => {
+  on('session.usage', () => ({
+    value: {
+      startedAt: 0,
+      context: { tokens: 340000, window: 1000000, percent: 34 },
+      rateLimits: [
+        { kind: 'five_hour', percentUsed: 16, resetsAt: new Date(Date.now() + 4 * 3_600_000).toISOString() },
+        { kind: 'seven_day', percentUsed: 50, resetsAt: new Date(Date.now() + 86_400_000).toISOString() },
+      ],
+      cost: { usd: 11.15 },
+    },
+  }))
+  on('ui.render', () => null as any)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 50 } })
+  expect(await ui.find({ type: 'Text', text: /^16%$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^34%$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\$11\.15$/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^340k/ })).toBeUndefined()
   await ui.unmount()
 })
