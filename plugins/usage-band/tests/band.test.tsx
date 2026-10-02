@@ -364,17 +364,26 @@ test('alerts can be turned off', { options: { alerts: false } }, async ($, on) =
   expect(toasts).toEqual([])
 })
 
-test('a nearly full context offers a Compact button that compacts', async ($, on) => {
+test('a context over 70% full offers a Compact button that compacts', async ($, on) => {
   STORE(on)
   let compacted = 0
+  let percent = 72
   on('session.compact', () => (compacted++, { value: {} }) as any)
-  ENGINE(on, { context: { tokens: 880000, window: 1000000, percent: 88 } })
+  on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: percent * 10000, window: 1000000, percent }, rateLimits: [] } }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('ui.render', () => null as any)
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
     await ui.press({ key: 'compact' })
     await ui.unmount()
   }
   expect(compacted).toBe(2)
+
+  // At exactly 70% it isn't offered yet.
+  percent = 70
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'compact' } as any)).toBeUndefined()
+  await ui.unmount()
 })
 
 test('desktop rings carry a hover tooltip', async ($, on) => {

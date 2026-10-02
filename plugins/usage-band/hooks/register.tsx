@@ -406,7 +406,7 @@ export const register: Register = (on, options) => {
       segments.push({ key: "context", label: "Context", pct: ctx.percent, details: tokens ? [tokens] : [], tooltip })
     }
     // Offer to compact once the context is nearly full.
-    const offerCompact = showCompact && (ctx?.percent ?? 0) >= 85
+    const offerCompact = showCompact && (ctx?.percent ?? 0) > 70
 
     const els = $.ui.resolve(e) as any
     const { Box, Text } = els

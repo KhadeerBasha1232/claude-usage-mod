@@ -1,6 +1,6 @@
 {
   "name": "usage-band",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "description": "Your Claude plan usage in one line above the prompt: 5-hour and weekly limits with reset times, context window, model and session cost.",
   "author": {
     "name": "Khadeer Basha",
@@ -38,7 +38,7 @@
     "compact_button": {
       "type": "boolean",
       "title": "Compact button",
-      "description": "Show a Compact button in the band when the context window is 85% full.",
+      "description": "Show a Compact button in the band once the context window is over 70% full.",
       "default": true
     },
     "reply_cost": {
