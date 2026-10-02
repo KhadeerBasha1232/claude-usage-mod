@@ -386,12 +386,13 @@ test('a context over 70% full offers a Compact button that compacts', async ($, 
   await ui.unmount()
 })
 
-test('desktop rings carry a hover tooltip', async ($, on) => {
+test('desktop rings are plain images, so redraws do not make them flicker', async ($, on) => {
   STORE(on)
   ENGINE(on, { rateLimits: [{ kind: 'seven_day', percentUsed: 52, resetsAt: inHours(30) }] })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const ring: any = await ui.find({ type: 'Svg' } as any)
-  expect(ring?.props?.isInteractive ?? ring?.isInteractive).toBe(true)
-  expect(String(ring?.props?.source ?? ring?.source)).toContain('<title>Weekly limit: 52% used')
+  expect(ring).toBeDefined()
+  expect(ring?.props?.isInteractive ?? ring?.isInteractive).toBeFalsy()
+  expect(String(ring?.props?.alt ?? ring?.alt)).toContain('Weekly limit: 52% used')
   await ui.unmount()
 })

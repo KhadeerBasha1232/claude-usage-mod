@@ -1,6 +1,6 @@
 {
   "name": "usage-band",
-  "version": "3.5.2",
+  "version": "3.6.0",
   "description": "Your Claude plan usage in one line above the prompt: 5-hour and weekly limits with reset times, context window, model and session cost.",
   "author": {
     "name": "Khadeer Basha",
@@ -45,12 +45,6 @@
       "type": "boolean",
       "title": "Last reply cost",
       "description": "Show what the last reply cost next to the session cost, e.g. $13.24 (+$0.41).",
-      "default": true
-    },
-    "tooltips": {
-      "type": "boolean",
-      "title": "Tooltips",
-      "description": "In the desktop app, show details when you hover over a ring.",
       "default": true
     }
   }

@@ -30,17 +30,15 @@ function colorFor(pct: number) {
 
 const RING_HEX: Record<string, string> = { green: '#3fb950', yellow: '#d29922', red: '#f85149' }
 
-// A small progress ring for the desktop, which draws SVG; its title is the
-// tooltip shown on hover.
-function ringSvg(pct: number, title = '') {
+// A small progress ring for the desktop, which draws SVG. It's drawn as a plain
+// image: an interactive one reloads, and flickers, every time the band redraws.
+function ringSvg(pct: number) {
   const r = 5.5
   const c = 2 * Math.PI * r
   const on = (Math.max(0, Math.min(pct, 100)) / 100) * c
   const stroke = RING_HEX[colorFor(pct)]
-  const safe = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14">` +
-    (safe ? `<title>${safe}</title>` : '') +
     `<circle cx="7" cy="7" r="${r}" fill="none" stroke="#8b949e" stroke-opacity="0.3" stroke-width="2"/>` +
     `<circle cx="7" cy="7" r="${r}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" ` +
     `stroke-dasharray="${on.toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 7 7)"/>` +
@@ -314,7 +312,6 @@ export const register: Register = (on, options) => {
   const showPace = isOn('pace')
   const showCompact = isOn('compact_button')
   const showReplyCost = isOn('reply_cost')
-  const showTooltips = isOn('tooltips')
 
   // What the session had cost when the current reply started, and what the last
   // finished reply added.
@@ -405,7 +402,7 @@ export const register: Register = (on, options) => {
       model = prettyModel(await $.session.model())
     } catch {}
 
-    type Segment = { key: string; label: string; pct: number; details: string[]; ahead?: boolean; tooltip: string }
+    type Segment = { key: string; label: string; pct: number; details: string[]; ahead?: boolean; tooltip: string } // tooltip: the ring's screen-reader label
     const segments: Segment[] = []
 
     for (const l of limits) {
@@ -481,11 +478,8 @@ export const register: Register = (on, options) => {
     segments.forEach((s, i) => {
       const color = colorFor(s.pct)
       const detail = s.key === "context" ? (plan.tokens ? s.details[0] : undefined) : s.details[plan.detail]
-      // An interactive SVG shows its <title> as a tooltip on hover.
       const ring = Svg
-        ? showTooltips
-          ? <Svg key="ring" source={ringSvg(s.pct, s.tooltip)} alt={s.tooltip} width={14} height={14} isInteractive />
-          : <Svg key="ring" source={ringSvg(s.pct)} alt={s.tooltip} width={14} height={14} />
+        ? <Svg key="ring" source={ringSvg(s.pct)} alt={s.tooltip} width={14} height={14} />
         : <Text key="ring" color={color}>{pieGlyph(s.pct)}</Text>
       if (i) parts.push(sep(`sep-${s.key}`))
       parts.push(

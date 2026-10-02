@@ -16,7 +16,6 @@ It also helps you stay ahead of your limits:
 - **Pace warning ⚠**: shown next to a limit you're using faster than its window is passing, so you know you'll run out before it resets.
 - **Limit alerts**: a pop-up when the 5-hour or weekly limit reaches 80% and 95%, and when it resets. Each shows once.
 - **Compact button**: appears in the band once the context window is over 70% full. Click it to compact the conversation.
-- **Tooltips**: in the desktop app, hover over a ring for the details.
 
 Each of these can be turned off in [Settings](#settings).
 
@@ -69,7 +68,6 @@ The band only reads local files. It makes no network requests and never touches 
 | `pace` | The ⚠ pace warning. On by default. |
 | `compact_button` | The Compact button once the context is over 70% full. On by default. |
 | `reply_cost` | The last reply's cost next to the session cost. On by default. |
-| `tooltips` | Hover tooltips on the rings in the desktop app. On by default. |
 
 Set it with:
 
