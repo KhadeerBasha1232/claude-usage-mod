@@ -2,7 +2,7 @@ import type { Register } from 'claude-code'
 
 // One line above the prompt with every usage figure:
 //
-//   ◔ 5h 7% resets in 4h 39m  │  ◑ Week 46% resets Sat 2:30 PM  │  ○ Context 16% 164k / 1M  │  Opus 5.5 · $2.14
+//   ◔ 5h 7% resets 1:19 PM  │  ◑ Week 46% resets Sat 2:30 PM  │  ○ Context 16% 164k / 1M  │  Opus 5.5 · $2.14
 //
 // The rings are SVG on the desktop and pie glyphs in the terminal.
 //
@@ -52,17 +52,6 @@ function pieGlyph(pct: number) {
   if (pct < 62.5) return '◑'
   if (pct < 87.5) return '◕'
   return '●'
-}
-
-function duration(ms: number) {
-  if (ms <= 0) return 'now'
-  const mins = Math.round(ms / 60000)
-  const d = Math.floor(mins / 1440)
-  const h = Math.floor((mins % 1440) / 60)
-  const m = mins % 60
-  if (d > 0) return h ? `${d}d ${h}h` : `${d}d`
-  if (h > 0) return m ? `${h}h ${m}m` : `${h}h`
-  return `${m}m`
 }
 
 function clock(at: number, now: number) {
@@ -257,10 +246,8 @@ export const register: Register = (on, options) => {
       const tilde = l.isEstimate ? "~" : ""
       let details: string[] = []
       if (l.resetsAt != null) {
-        // The 5-hour window reads best as a countdown, the weekly one as a day and time.
-        details = l.key === "five_hour"
-          ? [`resets in ${tilde}${duration(l.resetsAt - now)}`, `${tilde}${duration(l.resetsAt - now)}`]
-          : [`resets ${tilde}${clock(l.resetsAt, now)}`, `${tilde}${clock(l.resetsAt, now)}`]
+        // The time it resets at: just the time today, with the day when it's later.
+        details = [`resets ${tilde}${clock(l.resetsAt, now)}`, `${tilde}${clock(l.resetsAt, now)}`]
       } else if (l.key === "five_hour") {
         details = ["starts on your next message", "next message"]
       }

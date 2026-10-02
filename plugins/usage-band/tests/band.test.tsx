@@ -26,7 +26,10 @@ test('engine limits show exact reset times, context, model and cost on one line'
     const ui = await $.ui.mount({ ...BAND, surface })
     expect(await ui.find({ type: 'Text', text: /^5h$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^58%$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^resets in 2h 1m$/ })).toBeDefined()
+    // The 5-hour reset shows as a clock time, exact (no "~") when the engine gives it.
+    const fiveHourTime = new Date(in2h).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    const resets = (await ui.findAll({ type: 'Text', text: /^resets / })).map(t => t.text)
+    expect(resets.some(t => t.endsWith(fiveHourTime) && !t.includes('~'))).toBe(true)
     expect(await ui.find({ type: 'Text', text: /^Week$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^82k \/ 200k$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Opus 5\.5 · \$2\.14$/ })).toBeDefined()
@@ -57,7 +60,10 @@ test('falls back to the app usage file and estimates reset times', async ($, on)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /^7%$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^resets in ~4h 20m$/ })).toBeDefined()
+  // Window started 40 minutes ago, so it resets 4h 20m from now, marked as an estimate.
+  const fiveHourTime = new Date(now - 40 * 60_000 + 5 * 3_600_000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const resets = (await ui.findAll({ type: 'Text', text: /^resets / })).map(t => t.text)
+  expect(resets.some(t => t.startsWith('resets ~') && t.endsWith(fiveHourTime))).toBe(true)
   expect(await ui.find({ type: 'Text', text: /^46%$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^141k \/ 1M$/ })).toBeDefined()
   await ui.unmount()

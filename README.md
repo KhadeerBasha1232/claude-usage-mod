@@ -3,7 +3,7 @@
 Your Claude plan usage, always visible: a one-line band **directly above the prompt** in Claude Code.
 
 ```
-◔ 5h 20% resets in 57m  │  ◑ Week 50% resets Sat 2:30 PM  │  ○ Context 40% 404k / 1M  │  Opus 5.5 · $13.24
+◔ 5h 20% resets 1:19 PM  │  ◑ Week 50% resets Sat 2:30 PM  │  ○ Context 40% 404k / 1M  │  Opus 5.5 · $13.24
 ```
 
 - **5h**: your 5-hour session limit, with when it resets and how long until then
