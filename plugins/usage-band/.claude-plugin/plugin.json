@@ -1,6 +1,6 @@
 {
   "name": "usage-band",
-  "version": "3.5.1",
+  "version": "3.5.2",
   "description": "Your Claude plan usage in one line above the prompt: 5-hour and weekly limits with reset times, context window, model and session cost.",
   "author": {
     "name": "Khadeer Basha",

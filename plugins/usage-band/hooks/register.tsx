@@ -246,6 +246,17 @@ function withSaved(saved: Saved | undefined, app: Limit[], now: number): Limit[]
   return out
 }
 
+// What the band shows can change between turns only when the app's usage file
+// changes, another chat saves exact figures, or a reset time passes.
+async function changeSignature($: any, nextResetAt: number) {
+  let file = 0
+  try {
+    file = (await $.fs.stat(await usageFilePath($))).mtimeMs
+  } catch {}
+  const saved = ((await $.store.get(SAVED_KEY).catch(() => undefined)) as Saved | undefined)?.at ?? 0
+  return `${file}:${saved}:${Date.now() >= nextResetAt}`
+}
+
 const LABELS: Record<string, string> = { five_hour: '5h', seven_day: 'Week', spend_limit: 'Spend' }
 const ORDER = ['five_hour', 'seven_day', 'spend_limit']
 const NAMES: Record<string, string> = { five_hour: '5-hour limit', seven_day: 'Weekly limit', spend_limit: 'Spend limit' }
@@ -315,9 +326,22 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  // Between turns, check every 15 seconds whether anything the band shows has
+  // changed, and redraw only then: a redraw rebuilds the rings, which flickers
+  // on the desktop. What can change without a turn: the app's usage file, the
+  // exact figures another chat saved, and a reset time passing.
+  let lastSignature = ''
+  let nextResetAt = Infinity
+
   on('session.start', async ($, e, next) => {
-    // Keep the countdowns and the app's samples fresh between turns.
-    $.clock.every(15_000, () => $.ui.invalidate('ui.render'))
+    lastSignature = await changeSignature($, nextResetAt)
+    $.clock.every(15_000, async () => {
+      const now = await changeSignature($, nextResetAt)
+      if (now !== lastSignature) {
+        lastSignature = now
+        $.ui.invalidate('ui.render')
+      }
+    })
     return next(e)
   })
 
@@ -371,6 +395,8 @@ export const register: Register = (on, options) => {
       limits = withSaved(saved, await appLimits($, now, weeklyReset), now)
     }
     if (showAlerts) await raiseAlerts($, limits, now)
+    // The soonest reset still ahead, so the timer redraws when it passes.
+    nextResetAt = Math.min(Infinity, ...limits.map(l => l.resetsAt ?? Infinity).filter(t => t > now))
 
     const ctx = usage.context
     const cost = usage.cost?.usd
