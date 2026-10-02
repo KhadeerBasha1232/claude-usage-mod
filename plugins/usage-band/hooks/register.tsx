@@ -20,7 +20,7 @@ const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 
 
 type Limit = { key: string; label: string; pct: number; resetsAt?: number; isEstimate?: boolean }
-type AppSample = { t: number; u: { fh?: number; sd?: number } }
+type AppSample = { t: number; org?: string; u: { fh?: number; sd?: number } }
 
 function colorFor(pct: number) {
   if (pct >= 90) return 'red'
@@ -96,17 +96,35 @@ function nextConfiguredReset(text: string, now: number) {
   return at.getTime()
 }
 
-// The weekly figure falls back to (near) zero when its window resets: the last
-// such drop marks a reset, and every later one is a whole week on.
+// The weekly figure falls back to near zero when its window resets, somewhere
+// between the reading before the drop and the one after. The app only samples
+// while it's open, so that gap can be days: each drop gives a window the reset
+// fell in, and since the reset repeats weekly, overlapping the windows of every
+// drop narrows it down. A time is only given once that's within a few hours.
+const DETECT_PRECISION = 3 * HOUR
+
 function nextDetectedReset(samples: AppSample[], now: number) {
-  for (let i = samples.length - 1; i > 0; i--) {
+  const windows: Array<[number, number]> = []
+  for (let i = 1; i < samples.length; i++) {
     const prev = samples[i - 1].u.sd, cur = samples[i].u.sd
-    if (prev != null && cur != null && prev - cur >= 5) {
-      const resetAt = samples[i].t
-      return resetAt + Math.ceil((now - resetAt) / WEEK) * WEEK
+    if (prev != null && cur != null && prev - cur >= 5 && cur <= prev / 2) {
+      windows.push([samples[i - 1].t, samples[i].t])
     }
   }
-  return undefined
+  if (!windows.length) return undefined
+
+  // Start from the latest drop and narrow it with the earlier ones, each moved
+  // forward by whole weeks; one that doesn't overlap is ignored.
+  let [lo, hi] = windows[windows.length - 1]
+  for (const [l, h] of windows.slice(0, -1)) {
+    const shift = Math.round((hi - h) / WEEK) * WEEK
+    const nlo = Math.max(lo, l + shift), nhi = Math.min(hi, h + shift)
+    if (nlo <= nhi) [lo, hi] = [nlo, nhi]
+  }
+  if (hi - lo > DETECT_PRECISION) return undefined
+
+  const resetAt = (lo + hi) / 2
+  return resetAt + Math.ceil((now - resetAt) / WEEK) * WEEK
 }
 
 // The current 5-hour window started where the latest run of non-zero readings
@@ -142,9 +160,11 @@ async function usageFilePath($: any) {
 async function appLimits($: any, now: number, weeklyReset: string): Promise<Limit[]> {
   try {
     const json = JSON.parse(await $.fs.read(await usageFilePath($)))
-    const samples: AppSample[] = (json.samples ?? []).filter((s: AppSample) => s && s.u)
-    const last = samples[samples.length - 1]
+    const all: AppSample[] = (json.samples ?? []).filter((s: AppSample) => s && s.u)
+    const last = all[all.length - 1]
     if (!last) return []
+    // The file can hold readings from more than one account: keep the current one's.
+    const samples = all.filter(s => s.org === last.org)
 
     const limits: Limit[] = []
 
@@ -247,7 +267,7 @@ export const register: Register = (on, options) => {
       let details: string[] = []
       if (l.resetsAt != null) {
         // The time it resets at: just the time today, with the day when it's later.
-        details = [`resets ${tilde}${clock(l.resetsAt, now)}`, `${tilde}${clock(l.resetsAt, now)}`]
+        details = [`resets ${tilde}${clock(l.resetsAt, now)}`, `↻ ${tilde}${clock(l.resetsAt, now)}`]
       } else if (l.key === "five_hour") {
         details = ["starts on your next message", "next message"]
       }

@@ -47,7 +47,7 @@ claude plugin install usage-band@claude-usage-mod
 When it uses the app's history, the reset times are worked out, and marked with `~`:
 
 - **5-hour reset**: five hours from when the current window started filling (usually within a few minutes of the real time).
-- **Weekly reset**: detected from when your weekly figure last dropped back down. For an exact time, set it yourself (below).
+- **Weekly reset**: detected from when your weekly figure dropped back down. The app only records usage while it's open, so a reset is often only noticed hours or days later. The band shows a detected time only once it can pin it down to within about 3 hours (it gets better as more weeks of history build up). Until then the weekly figure shows without a time. **For an exact time from day one, set `weekly_reset` (below).**
 
 The band only reads local files. It makes no network requests and never touches your credentials.
 
@@ -55,7 +55,7 @@ The band only reads local files. It makes no network requests and never touches 
 
 | Option | What it does |
 |---|---|
-| `weekly_reset` | Your weekly limit's reset time in local time, e.g. `Sat 14:30` or `Saturday 2:30 PM`. You can find it in Claude **Settings → Usage**. Leave empty to detect it automatically. |
+| `weekly_reset` | **Recommended.** Your weekly limit's reset time in local time, e.g. `Sat 14:30` or `Saturday 2:30 PM`. You can find it in Claude **Settings → Usage**. Leave empty to detect it automatically. |
 
 Set it with:
 

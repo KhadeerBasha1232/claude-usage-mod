@@ -181,3 +181,63 @@ test('a narrow band drops the cost and token counts instead of wrapping', async 
   expect(await ui.find({ type: 'Text', text: /^340k/ })).toBeUndefined()
   await ui.unmount()
 })
+
+const APP_ONLY = (on: any, samples: unknown[]) => {
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1000000 }, rateLimits: [] } }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('env.get', () => ({ value: 'C:\AppData' }))
+  on('fs.read', () => APP_FILE(samples))
+  on('ui.render', () => null as any)
+}
+
+test('a drop seen only after a long gap gives no weekly time rather than a wrong one', async ($, on) => {
+  const now = Date.now()
+  APP_ONLY(on, [
+    { t: now - 4 * 86_400_000, org: 'a', u: { fh: 0, sd: 60 } },
+    { t: now - 2 * 86_400_000, org: 'a', u: { fh: 0, sd: 2 } }, // reset somewhere in these two days
+    { t: now - 60_000, org: 'a', u: { fh: 0, sd: 9 } },
+  ])
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^9%$/ })).toBeDefined()
+  const resets = (await ui.findAll({ type: 'Text', text: /^resets / })).map(t => t.text)
+  expect(resets).toEqual([]) // the 5-hour row says "starts on your next message" instead
+  await ui.unmount()
+})
+
+test('several weekly resets are overlapped to pin the time down', async ($, on) => {
+  const WEEK = 7 * 86_400_000
+  const reset = Date.now() - 2 * 86_400_000 // the true reset, two days ago
+  APP_ONLY(on, [
+    // Two weeks ago: seen within a wide 20-hour window, ending an hour after the reset.
+    { t: reset - 2 * WEEK - 19 * 3_600_000, org: 'a', u: { fh: 0, sd: 70 } },
+    { t: reset - 2 * WEEK + 3_600_000, org: 'a', u: { fh: 0, sd: 3 } },
+    // Last week: another wide window, starting an hour before the reset.
+    { t: reset - WEEK - 3_600_000, org: 'a', u: { fh: 0, sd: 80 } },
+    { t: reset - WEEK + 30 * 3_600_000, org: 'a', u: { fh: 0, sd: 4 } },
+    // This week: wide again, but together they leave a two-hour window.
+    { t: reset - 10 * 3_600_000, org: 'a', u: { fh: 0, sd: 75 } },
+    { t: reset + 10 * 3_600_000, org: 'a', u: { fh: 0, sd: 2 } },
+    { t: Date.now() - 60_000, org: 'a', u: { fh: 0, sd: 11 } },
+  ])
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const expected = new Date(reset + WEEK).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const resets = (await ui.findAll({ type: 'Text', text: /^resets ~/ })).map(t => t.text)
+  expect(resets.some(t => t.endsWith(expected))).toBe(true)
+  await ui.unmount()
+})
+
+test("another account's readings in the file are ignored", async ($, on) => {
+  const now = Date.now()
+  APP_ONLY(on, [
+    { t: now - 3 * 3_600_000, org: 'other', u: { fh: 0, sd: 90 } },
+    { t: now - 2 * 3_600_000, org: 'mine', u: { fh: 0, sd: 20 } }, // not a reset: different account
+    { t: now - 60_000, org: 'mine', u: { fh: 0, sd: 22 } },
+  ])
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^22%$/ })).toBeDefined()
+  expect((await ui.findAll({ type: 'Text', text: /^resets / })).length).toBe(0)
+  await ui.unmount()
+})
