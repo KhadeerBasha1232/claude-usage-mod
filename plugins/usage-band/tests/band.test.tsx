@@ -241,3 +241,72 @@ test("another account's readings in the file are ignored", async ($, on) => {
   expect((await ui.findAll({ type: 'Text', text: /^resets / })).length).toBe(0)
   await ui.unmount()
 })
+
+// A store every session on the machine shares, kept in memory for the test.
+const STORE = (on: any) => {
+  const store = new Map<string, unknown>()
+  on('store.get', (_$: any, e: any) => ({ value: store.get(e.key) }) as any)
+  on('store.set', (_$: any, e: any) => (store.set(e.key, e.value), { value: undefined }) as any)
+  return store
+}
+
+test('exact figures from one session are reused in a session that has none', async ($, on) => {
+  const now = Date.now()
+  const fiveHourReset = now + 3 * 3_600_000
+  const weekReset = now + 2 * 86_400_000
+  STORE(on)
+  let engineHasLimits = true
+  on('session.usage', () => ({
+    value: {
+      startedAt: 0,
+      context: { window: 1000000 },
+      rateLimits: engineHasLimits
+        ? [
+            { kind: 'five_hour', percentUsed: 32, resetsAt: new Date(fiveHourReset).toISOString() },
+            { kind: 'seven_day', percentUsed: 52, resetsAt: new Date(weekReset).toISOString() },
+          ]
+        : [],
+    },
+  }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('env.get', () => ({ value: 'C:\AppData' }))
+  // The app's own reading is older than the saved one, and its estimates are off.
+  on('fs.read', () => APP_FILE([{ t: now - 3_600_000, org: 'a', u: { fh: 20, sd: 50 } }]))
+  on('ui.render', () => null as any)
+
+  const first = await $.ui.mount({ ...BAND, surface: 'desktop' }) // saves the exact figures
+  await first.unmount()
+
+  engineHasLimits = false
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^32%$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^52%$/ })).toBeDefined()
+  const time = (t: number) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const resets = (await ui.findAll({ type: 'Text', text: /^resets / })).map(t => t.text)
+  expect(resets.some(t => t.endsWith(time(fiveHourReset)) && !t.includes('~'))).toBe(true)
+  expect(resets.some(t => t.endsWith(time(weekReset)) && !t.includes('~'))).toBe(true)
+  await ui.unmount()
+})
+
+test('a saved weekly reset that has passed rolls on a week, and the old week reads 0%', async ($, on) => {
+  const now = Date.now()
+  const store = STORE(on)
+  const passedReset = now - 86_400_000 // reset a day ago
+  store.set('rateLimits', {
+    at: now - 2 * 86_400_000,
+    limits: [{ kind: 'seven_day', percentUsed: 88, resetsAt: new Date(passedReset).toISOString() }],
+  })
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1000000 }, rateLimits: [] } }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('env.get', () => ({ value: 'C:\AppData' }))
+  on('fs.read', () => APP_FILE([{ t: now - 3 * 86_400_000, org: 'a', u: { fh: 0, sd: 88 } }])) // also last week
+  on('ui.render', () => null as any)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^0%$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^88%$/ })).toBeUndefined()
+  const next = new Date(passedReset + 7 * 86_400_000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const resets = (await ui.findAll({ type: 'Text', text: /^resets / })).map(t => t.text)
+  expect(resets.some(t => t.endsWith(next) && !t.includes('~'))).toBe(true)
+  await ui.unmount()
+})

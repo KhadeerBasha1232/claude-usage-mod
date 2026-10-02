@@ -11,7 +11,7 @@ Your Claude plan usage, always visible: a one-line band **directly above the pro
 - **Context**: how full this chat's context window is, in tokens
 - **Model** and this session's **cost** at API prices (you aren't charged this on a Pro/Max plan)
 
-Each figure has a small progress ring (pie glyphs `○ ◔ ◑ ◕ ●` in the terminal) that turns **yellow at 70%** and **red at 90%**. The band updates live: every 15 seconds, after each step Claude takes, and after every reply. It always stays on one line: in a narrow window it drops the cost, then shortens the reset times, then drops the token count, then the model.
+Each figure has a small progress ring (pie glyphs `○ ◔ ◑ ◕ ●` in the terminal) that turns **yellow at 70%** and **red at 90%**. The band updates live: every 15 seconds, after each step Claude takes, and after every reply. It always stays on one line: in a narrow window it shortens the reset times to `↻ 1:19 PM`, then drops the cost, then the token count, then the model.
 
 Works in the **Claude desktop app (Code tab)** on macOS and Windows, and in **`claude` in the terminal**.
 
@@ -41,10 +41,10 @@ claude plugin install usage-band@claude-usage-mod
 
 | Figure | Source |
 |---|---|
-| 5h / Week | Claude Code's own rate-limit figures when it has them, which give exact reset times. Desktop sessions often don't get them, so the band falls back to the usage history the Claude desktop app keeps on your computer (`plan-usage-history.json`). |
+| 5h / Week | Claude Code's own rate-limit figures, which give exact reset times. Claude Code only reports them in some sessions, and only after a reply, so the band **saves the last exact figures** and every chat on your computer reuses them. Until it has seen exact figures once, it falls back to the usage history the Claude desktop app keeps on your computer (`plan-usage-history.json`). |
 | Context, model, cost | Claude Code's session figures |
 
-When it uses the app's history, the reset times are worked out, and marked with `~`:
+Saved reset times stay exact: the weekly one rolls on a week at a time, and the percentage always comes from the newest reading. Only when the band has never seen exact figures are the reset times worked out from the app's history, marked with `~`:
 
 - **5-hour reset**: five hours from when the current window started filling (usually within a few minutes of the real time).
 - **Weekly reset**: detected from when your weekly figure dropped back down. The app only records usage while it's open, so a reset is often only noticed hours or days later. The band shows a detected time only once it can pin it down to within about 3 hours (it gets better as more weeks of history build up). Until then the weekly figure shows without a time. **For an exact time from day one, set `weekly_reset` (below).**

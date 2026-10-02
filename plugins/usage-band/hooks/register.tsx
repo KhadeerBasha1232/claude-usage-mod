@@ -19,7 +19,7 @@ const WEEK = 7 * 24 * HOUR
 const DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 
 
-type Limit = { key: string; label: string; pct: number; resetsAt?: number; isEstimate?: boolean }
+type Limit = { key: string; label: string; pct: number; resetsAt?: number; isEstimate?: boolean; readAt?: number }
 type AppSample = { t: number; org?: string; u: { fh?: number; sd?: number } }
 
 function colorFor(pct: number) {
@@ -178,6 +178,7 @@ async function appLimits($: any, now: number, weeklyReset: string): Promise<Limi
         pct: isExpired ? 0 : last.u.fh,
         resetsAt: isExpired ? undefined : resetsAt,
         isEstimate: true,
+        readAt: last.t,
       })
     }
 
@@ -192,6 +193,7 @@ async function appLimits($: any, now: number, weeklyReset: string): Promise<Limi
         pct: isStale ? 0 : last.u.sd,
         resetsAt,
         isEstimate: configured == null,
+        readAt: last.t,
       })
     }
 
@@ -201,10 +203,52 @@ async function appLimits($: any, now: number, weeklyReset: string): Promise<Limi
   }
 }
 
+// The last exact figures Claude Code reported, kept in the store every session
+// on this machine shares: Claude Code only reports them in some sessions, and
+// only after a reply, so the others borrow them.
+type Saved = { at: number; limits: Array<{ kind: string; percentUsed: number; resetsAt?: string }> }
+const SAVED_KEY = 'rateLimits'
+const PERIOD: Record<string, number> = { five_hour: FIVE_HOURS, seven_day: WEEK }
+
+// An exact reset that has passed moves on by whole windows for the weekly
+// limit; a passed 5-hour reset says nothing about the next window.
+function rollForward(kind: string, resetsAt: number, now: number) {
+  if (resetsAt > now) return resetsAt
+  return kind === 'seven_day' ? resetsAt + Math.ceil((now - resetsAt) / WEEK) * WEEK : undefined
+}
+
+// Saved exact reset times win over estimated ones. The percentage is the newest
+// reading of the current window: the saved one, or the app's if it's newer, or
+// zero when the window has reset since either was taken.
+function withSaved(saved: Saved | undefined, app: Limit[], now: number): Limit[] {
+  if (!saved?.limits?.length) return app
+  const kinds = ORDER.filter(k => app.some(a => a.key === k) || saved.limits.some(l => l.kind === k))
+  const out: Limit[] = []
+  for (const kind of kinds) {
+    const a = app.find(l => l.key === kind)
+    const s = saved.limits.find(l => l.kind === kind)
+    const exact = s?.resetsAt ? rollForward(kind, Date.parse(s.resetsAt), now) : undefined
+    if (s == null || exact == null) {
+      if (a) out.push(a)
+      continue
+    }
+    const windowStart = exact - (PERIOD[kind] ?? WEEK)
+    const readings = [
+      { pct: s.percentUsed, at: saved.at },
+      ...(a?.readAt != null ? [{ pct: a.pct, at: a.readAt }] : []),
+    ].filter(r => r.at >= windowStart)
+    const newest = readings.sort((x, y) => y.at - x.at)[0]
+    out.push({ key: kind, label: LABELS[kind] ?? kind, pct: newest ? newest.pct : 0, resetsAt: exact })
+  }
+  return out
+}
+
 const LABELS: Record<string, string> = { five_hour: '5h', seven_day: 'Week', spend_limit: 'Spend' }
 const ORDER = ['five_hour', 'seven_day', 'spend_limit']
 
 export const register: Register = (on, options) => {
+  // What this session last saved, so an unchanged reading isn't written again.
+  let lastSaved = ''
   const weeklyReset = String((options as any)?.weekly_reset ?? '')
 
   on('session.start', async ($, e, next) => {
@@ -250,7 +294,16 @@ export const register: Register = (on, options) => {
         pct: l.percentUsed,
         resetsAt: l.resetsAt ? Date.parse(l.resetsAt) : undefined,
       }))
-    if (!limits.length) limits = await appLimits($, now, weeklyReset)
+    if (usage.rateLimits?.length) {
+      const fresh = JSON.stringify(usage.rateLimits)
+      if (fresh !== lastSaved) {
+        lastSaved = fresh
+        await $.store.set(SAVED_KEY, { at: now, limits: usage.rateLimits } satisfies Saved).catch(() => {})
+      }
+    } else {
+      const saved = (await $.store.get(SAVED_KEY).catch(() => undefined)) as Saved | undefined
+      limits = withSaved(saved, await appLimits($, now, weeklyReset), now)
+    }
 
     const ctx = usage.context
     const cost = usage.cost?.usd
@@ -290,7 +343,7 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // Fit one line: drop the cost, then shorten the reset phrases, then drop the
+    // Fit one line: shorten the reset phrases to "↻", then drop the cost, then the
     // context tokens, then the model, then the reset phrases altogether.
     const GAP = 2
     const SEP_WIDTH = 1 + 2 * GAP
@@ -308,7 +361,7 @@ export const register: Register = (on, options) => {
     const cols = e.props.bodyColumns ?? 200
     const plans: Plan[] = [
       { detail: 0, cost: true, tokens: true, model: true },
-      { detail: 0, cost: false, tokens: true, model: true },
+      { detail: 1, cost: true, tokens: true, model: true },
       { detail: 1, cost: false, tokens: true, model: true },
       { detail: 1, cost: false, tokens: false, model: true },
       { detail: 1, cost: false, tokens: false, model: false },
