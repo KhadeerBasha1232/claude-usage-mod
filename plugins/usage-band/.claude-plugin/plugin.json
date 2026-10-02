@@ -1,0 +1,18 @@
+{
+  "name": "usage-band",
+  "version": "3.0.0",
+  "description": "Your Claude plan usage in one line above the prompt: 5-hour and weekly limits with reset times, context window, model and session cost.",
+  "author": { "name": "Khadeer Basha", "url": "https://github.com/KhadeerBasha1232" },
+  "homepage": "https://github.com/KhadeerBasha1232/claude-usage-mod",
+  "repository": "https://github.com/KhadeerBasha1232/claude-usage-mod",
+  "license": "MIT",
+  "keywords": ["usage", "rate-limits", "context", "status", "mod"],
+  "userConfig": {
+    "weekly_reset": {
+      "type": "string",
+      "title": "Weekly limit reset time (optional)",
+      "description": "When your weekly limit resets, in your local time, e.g. \"Sat 14:30\" or \"Saturday 2:30 PM\" (see Claude Settings > Usage). Leave empty to detect it automatically.",
+      "default": ""
+    }
+  }
+}

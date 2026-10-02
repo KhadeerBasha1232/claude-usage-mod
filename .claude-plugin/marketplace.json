@@ -1,0 +1,15 @@
+{
+  "name": "claude-usage-mod",
+  "owner": { "name": "Khadeer Basha", "url": "https://github.com/KhadeerBasha1232" },
+  "metadata": {
+    "description": "Claude Code mods for keeping an eye on your plan usage."
+  },
+  "plugins": [
+    {
+      "name": "usage-band",
+      "source": "./plugins/usage-band",
+      "description": "Your Claude plan usage in one line above the prompt: 5-hour and weekly limits with reset times, context window, model and session cost.",
+      "category": "productivity"
+    }
+  ]
+}
