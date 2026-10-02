@@ -30,14 +30,17 @@ function colorFor(pct: number) {
 
 const RING_HEX: Record<string, string> = { green: '#3fb950', yellow: '#d29922', red: '#f85149' }
 
-// A small progress ring for the desktop, which draws SVG.
-function ringSvg(pct: number) {
+// A small progress ring for the desktop, which draws SVG; its title is the
+// tooltip shown on hover.
+function ringSvg(pct: number, title = '') {
   const r = 5.5
   const c = 2 * Math.PI * r
   const on = (Math.max(0, Math.min(pct, 100)) / 100) * c
   const stroke = RING_HEX[colorFor(pct)]
+  const safe = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 14 14">` +
+    (safe ? `<title>${safe}</title>` : '') +
     `<circle cx="7" cy="7" r="${r}" fill="none" stroke="#8b949e" stroke-opacity="0.3" stroke-width="2"/>` +
     `<circle cx="7" cy="7" r="${r}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linecap="round" ` +
     `stroke-dasharray="${on.toFixed(2)} ${c.toFixed(2)}" transform="rotate(-90 7 7)"/>` +
@@ -245,11 +248,72 @@ function withSaved(saved: Saved | undefined, app: Limit[], now: number): Limit[]
 
 const LABELS: Record<string, string> = { five_hour: '5h', seven_day: 'Week', spend_limit: 'Spend' }
 const ORDER = ['five_hour', 'seven_day', 'spend_limit']
+const NAMES: Record<string, string> = { five_hour: '5-hour limit', seven_day: 'Weekly limit', spend_limit: 'Spend limit' }
+
+// Using a limit faster than its window is passing: at least 20% used, and more
+// than 15 points ahead of the share of the window that has gone by.
+function isAhead(l: Limit, now: number) {
+  const period = PERIOD[l.key]
+  if (l.resetsAt == null || period == null || l.pct < 20) return false
+  const elapsed = Math.min(1, Math.max(0, 1 - (l.resetsAt - now) / period))
+  return l.pct / 100 > elapsed + 0.15
+}
+
+// Pop-ups when a limit crosses 80% and 95%, and when one resets. Each fires once
+// per window, remembered in the store every session shares so two open chats
+// don't both show it.
+type Alerts = { fired: string[]; windows: Record<string, number> }
+const ALERTS_KEY = 'alerts'
+const THRESHOLDS = [95, 80]
+
+async function raiseAlerts($: any, limits: Limit[], now: number) {
+  const state = ((await $.store.get(ALERTS_KEY).catch(() => undefined)) ?? { fired: [], windows: {} }) as Alerts
+  let changed = false
+  for (const l of limits) {
+    if (l.resetsAt == null || PERIOD[l.key] == null) continue
+    const name = NAMES[l.key] ?? l.label
+
+    // The window moved on since we last looked: it has reset.
+    const prev = state.windows[l.key]
+    if (prev == null || Math.abs(prev - l.resetsAt) > 30 * 60_000) {
+      if (prev != null && prev <= now && l.resetsAt > prev) $.ui.toast(`${name} has reset`)
+      state.windows[l.key] = l.resetsAt
+      changed = true
+    }
+
+    // Name the window by the hour it resets in, so small shifts in an estimate don't re-fire.
+    const crossed = THRESHOLDS.find(t => l.pct >= t)
+    const id = crossed && `${l.key}:${Math.round(l.resetsAt / HOUR)}:${crossed}`
+    if (id && !state.fired.includes(id)) {
+      $.ui.toast(`${name} at ${Math.round(l.pct)}% · resets ${clock(l.resetsAt, now)}`, { timeoutMs: 8000 })
+      state.fired = [...state.fired, id].slice(-40)
+      changed = true
+    }
+  }
+  if (changed) await $.store.set(ALERTS_KEY, state).catch(() => {})
+}
 
 export const register: Register = (on, options) => {
   // What this session last saved, so an unchanged reading isn't written again.
   let lastSaved = ''
   const weeklyReset = String((options as any)?.weekly_reset ?? '')
+  // Every extra is on unless its option is set to false.
+  const isOn = (name: string) => (options as any)?.[name] !== false
+  const showAlerts = isOn('alerts')
+  const showPace = isOn('pace')
+  const showCompact = isOn('compact_button')
+  const showReplyCost = isOn('reply_cost')
+  const showTooltips = isOn('tooltips')
+
+  // What the session had cost when the current reply started, and what the last
+  // finished reply added.
+  let turnStartCost: number | undefined
+  let lastReplyCost: number | undefined
+
+  on('turn.start', async ($, e, next) => {
+    turnStartCost = (await $.session.usage()).cost?.usd
+    return next(e)
+  })
 
   on('session.start', async ($, e, next) => {
     // Keep the countdowns and the app's samples fresh between turns.
@@ -272,6 +336,8 @@ export const register: Register = (on, options) => {
   })
 
   on('turn.complete', async ($, e, next) => {
+    const cost = (await $.session.usage()).cost?.usd
+    if (cost != null && turnStartCost != null && cost > turnStartCost) lastReplyCost = cost - turnStartCost
     $.ui.invalidate('ui.render')
     return next(e)
   })
@@ -304,6 +370,7 @@ export const register: Register = (on, options) => {
       const saved = (await $.store.get(SAVED_KEY).catch(() => undefined)) as Saved | undefined
       limits = withSaved(saved, await appLimits($, now, weeklyReset), now)
     }
+    if (showAlerts) await raiseAlerts($, limits, now)
 
     const ctx = usage.context
     const cost = usage.cost?.usd
@@ -312,7 +379,7 @@ export const register: Register = (on, options) => {
       model = prettyModel(await $.session.model())
     } catch {}
 
-    type Segment = { key: string; label: string; pct: number; details: string[] }
+    type Segment = { key: string; label: string; pct: number; details: string[]; ahead?: boolean; tooltip: string }
     const segments: Segment[] = []
 
     for (const l of limits) {
@@ -324,13 +391,22 @@ export const register: Register = (on, options) => {
       } else if (l.key === "five_hour") {
         details = ["starts on your next message", "next message"]
       }
-      segments.push({ key: l.key, label: l.label, pct: l.pct, details })
+      const ahead = showPace && isAhead(l, now)
+      const tooltip = [
+        `${NAMES[l.key] ?? l.label}: ${Math.round(l.pct)}% used`,
+        l.resetsAt != null ? `resets ${l.isEstimate ? "about " : ""}${clock(l.resetsAt, now)}` : "",
+        ahead ? "using it faster than the window is passing" : "",
+      ].filter(Boolean).join(" · ")
+      segments.push({ key: l.key, label: l.label, pct: l.pct, details, ahead, tooltip })
     }
 
     if (ctx?.percent != null) {
       const tokens = ctx.tokens != null ? `${compact(ctx.tokens)} / ${compact(ctx.window)}` : ""
-      segments.push({ key: "context", label: "Context", pct: ctx.percent, details: tokens ? [tokens] : [] })
+      const tooltip = `Context window: ${ctx.percent}% full${ctx.tokens != null ? ` · ${ctx.tokens.toLocaleString()} of ${ctx.window.toLocaleString()} tokens` : ""}`
+      segments.push({ key: "context", label: "Context", pct: ctx.percent, details: tokens ? [tokens] : [], tooltip })
     }
+    // Offer to compact once the context is nearly full.
+    const offerCompact = showCompact && (ctx?.percent ?? 0) >= 85
 
     const els = $.ui.resolve(e) as any
     const { Box, Text } = els
@@ -347,16 +423,18 @@ export const register: Register = (on, options) => {
     // then drop the context tokens, then the model, then the reset phrases.
     const GAP = 2
     const SEP_WIDTH = 1 + 2 * GAP
-    const costText = cost != null ? `$${cost.toFixed(2)}` : ""
+    const replyCost = showReplyCost && lastReplyCost != null && lastReplyCost >= 0.005 ? ` (+$${lastReplyCost.toFixed(2)})` : ""
+    const costText = cost != null ? `$${cost.toFixed(2)}${replyCost}` : ""
+    const COMPACT_WIDTH = "Compact".length + GAP
     type Plan = { detail: number; cost: boolean; tokens: boolean; model: boolean }
     const tailText = (p: Plan) => [p.model ? model : "", p.cost ? costText : ""].filter(Boolean).join(" · ")
     const width = (p: Plan) => {
       const segs = segments.reduce((sum, s, i) => {
         const detail = s.key === "context" ? (p.tokens ? s.details[0] ?? "" : "") : s.details[p.detail] ?? ""
-        return sum + (i ? SEP_WIDTH : 0) + 2 + s.label.length + 1 + `${Math.round(s.pct)}%`.length + (detail ? 1 + detail.length : 0)
+        return sum + (i ? SEP_WIDTH : 0) + 2 + s.label.length + 1 + `${Math.round(s.pct)}%`.length + (s.ahead ? 2 : 0) + (detail ? 1 + detail.length : 0)
       }, 0)
       const tail = tailText(p)
-      return segs + (tail ? SEP_WIDTH + tail.length : 0) + 2
+      return segs + (offerCompact ? COMPACT_WIDTH : 0) + (tail ? SEP_WIDTH + tail.length : 0) + 2
     }
     const cols = e.props.bodyColumns ?? 200
     const plans: Plan[] = [
@@ -372,12 +450,16 @@ export const register: Register = (on, options) => {
     // A quiet grey divider; dimColor alone tints oddly on some surfaces.
     const sep = (key: string) => <Text key={key} color="#6e7681">│</Text>
 
+    const { Button } = els
     const parts: any[] = []
     segments.forEach((s, i) => {
       const color = colorFor(s.pct)
       const detail = s.key === "context" ? (plan.tokens ? s.details[0] : undefined) : s.details[plan.detail]
+      // An interactive SVG shows its <title> as a tooltip on hover.
       const ring = Svg
-        ? <Svg key="ring" source={ringSvg(s.pct)} alt={`${s.label} ${Math.round(s.pct)}% used`} width={14} height={14} />
+        ? showTooltips
+          ? <Svg key="ring" source={ringSvg(s.pct, s.tooltip)} alt={s.tooltip} width={14} height={14} isInteractive />
+          : <Svg key="ring" source={ringSvg(s.pct)} alt={s.tooltip} width={14} height={14} />
         : <Text key="ring" color={color}>{pieGlyph(s.pct)}</Text>
       if (i) parts.push(sep(`sep-${s.key}`))
       parts.push(
@@ -385,7 +467,11 @@ export const register: Register = (on, options) => {
           {ring}
           <Text dimColor>{s.label}</Text>
           <Text color={color} bold>{`${Math.round(s.pct)}%`}</Text>
+          {s.ahead ? <Text key="ahead" color="yellow">⚠</Text> : null}
           {detail ? <Text dimColor>{detail}</Text> : null}
+          {s.key === "context" && offerCompact && Button
+            ? <Button key="compact" label="Compact" plain onPress={() => { $.session.compact().catch(() => {}) }} />
+            : null}
         </Box>,
       )
     })

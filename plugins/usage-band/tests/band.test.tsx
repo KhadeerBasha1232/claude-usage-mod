@@ -310,3 +310,79 @@ test('a saved weekly reset that has passed rolls on a week, and the old week rea
   expect(resets.some(t => t.endsWith(next) && !t.includes('~'))).toBe(true)
   await ui.unmount()
 })
+
+const ENGINE = (on: any, value: object) => {
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 1000000 }, rateLimits: [], ...value } }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('ui.render', () => null as any)
+}
+const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString()
+
+test('a limit used faster than its window passes is marked with ⚠', async ($, on) => {
+  STORE(on)
+  ENGINE(on, {
+    rateLimits: [
+      { kind: 'five_hour', percentUsed: 70, resetsAt: inHours(4) }, // 70% used, 20% of the window gone
+      { kind: 'seven_day', percentUsed: 30, resetsAt: inHours(24) }, // 30% used, ~86% gone
+    ],
+  })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect((await ui.findAll({ type: 'Text', text: /^⚠$/ })).length).toBe(1)
+  await ui.unmount()
+})
+
+test('alerts pop up once at 80%, and again when the limit resets', async ($, on) => {
+  const memory = STORE(on)
+  const toasts: string[] = []
+  on('ui.toast', (_$: any, e: any) => (toasts.push(e.text), { value: undefined }) as any)
+  let resetsAt = inHours(2)
+  let pct = 83
+  on('session.usage', () => ({
+    value: { startedAt: 0, context: { window: 1000000 }, rateLimits: [{ kind: 'five_hour', percentUsed: pct, resetsAt }] },
+  }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('ui.render', () => null as any)
+
+  for (let i = 0; i < 2; i++) (await $.ui.mount({ ...BAND, surface: 'desktop' })).unmount()
+  expect(toasts.filter(t => t.startsWith('5-hour limit at 83%')).length).toBe(1) // once, not per redraw
+
+  // The window passes: a new one starts and the alert says so.
+  const alerts = memory.get('alerts') as any
+  memory.set('alerts', { ...alerts, windows: { ...alerts.windows, five_hour: Date.now() - 60_000 } })
+  resetsAt = inHours(5)
+  pct = 1
+  await (await $.ui.mount({ ...BAND, surface: 'desktop' })).unmount()
+  expect(toasts).toContain('5-hour limit has reset')
+})
+
+test('alerts can be turned off', { options: { alerts: false } }, async ($, on) => {
+  STORE(on)
+  const toasts: string[] = []
+  on('ui.toast', (_$: any, e: any) => (toasts.push(e.text), { value: undefined }) as any)
+  ENGINE(on, { rateLimits: [{ kind: 'five_hour', percentUsed: 97, resetsAt: inHours(1) }] })
+  await (await $.ui.mount({ ...BAND, surface: 'desktop' })).unmount()
+  expect(toasts).toEqual([])
+})
+
+test('a nearly full context offers a Compact button that compacts', async ($, on) => {
+  STORE(on)
+  let compacted = 0
+  on('session.compact', () => (compacted++, { value: {} }) as any)
+  ENGINE(on, { context: { tokens: 880000, window: 1000000, percent: 88 } })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    await ui.press({ key: 'compact' })
+    await ui.unmount()
+  }
+  expect(compacted).toBe(2)
+})
+
+test('desktop rings carry a hover tooltip', async ($, on) => {
+  STORE(on)
+  ENGINE(on, { rateLimits: [{ kind: 'seven_day', percentUsed: 52, resetsAt: inHours(30) }] })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  const ring: any = await ui.find({ type: 'Svg' } as any)
+  expect(ring?.props?.isInteractive ?? ring?.isInteractive).toBe(true)
+  expect(String(ring?.props?.source ?? ring?.source)).toContain('<title>Weekly limit: 52% used')
+  await ui.unmount()
+})

@@ -3,13 +3,22 @@
 Your Claude plan usage, always visible: a one-line band **directly above the prompt** in Claude Code.
 
 ```
-◔ 5h 20% resets 1:19 PM  │  ◑ Week 50% resets Sat 2:30 PM  │  ○ Context 40% 404k / 1M  │  Opus 5.5 · $13.24
+◔ 5h 72% ⚠ resets 1:19 PM  │  ◑ Week 50% resets Sat 2:30 PM  │  ○ Context 40% 404k / 1M  │  Opus 5.5 · $13.24 (+$0.41)
 ```
 
 - **5h**: your 5-hour session limit, with the time it resets
 - **Week**: your weekly limit, with its reset time
 - **Context**: how full this chat's context window is, in tokens
-- **Model** and this session's **cost** at API prices (you aren't charged this on a Pro/Max plan)
+- **Model** and this session's **cost** at API prices, with what the last reply added (you aren't charged this on a Pro/Max plan)
+
+It also helps you stay ahead of your limits:
+
+- **Pace warning ⚠**: shown next to a limit you're using faster than its window is passing, so you know you'll run out before it resets.
+- **Limit alerts**: a pop-up when the 5-hour or weekly limit reaches 80% and 95%, and when it resets. Each shows once.
+- **Compact button**: appears in the band when the context window is 85% full. Click it to compact the conversation.
+- **Tooltips**: in the desktop app, hover over a ring for the details.
+
+Each of these can be turned off in [Settings](#settings).
 
 Each figure has a small progress ring (pie glyphs `○ ◔ ◑ ◕ ●` in the terminal) that turns **yellow at 70%** and **red at 90%**. The band updates live: every 15 seconds, after each step Claude takes, and after every reply. It always stays on one line: in a narrow window it shortens the reset times to `↻ 1:19 PM`, then drops the token count, then the model. The cost always stays.
 
@@ -56,6 +65,11 @@ The band only reads local files. It makes no network requests and never touches 
 | Option | What it does |
 |---|---|
 | `weekly_reset` | **Recommended.** Your weekly limit's reset time in local time, e.g. `Sat 14:30` or `Saturday 2:30 PM`. You can find it in Claude **Settings → Usage**. Leave empty to detect it automatically. |
+| `alerts` | Pop-ups at 80% and 95% and when a limit resets. On by default. |
+| `pace` | The ⚠ pace warning. On by default. |
+| `compact_button` | The Compact button when the context is 85% full. On by default. |
+| `reply_cost` | The last reply's cost next to the session cost. On by default. |
+| `tooltips` | Hover tooltips on the rings in the desktop app. On by default. |
 
 Set it with:
 

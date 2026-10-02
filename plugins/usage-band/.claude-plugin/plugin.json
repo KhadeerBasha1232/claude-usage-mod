@@ -1,18 +1,57 @@
 {
   "name": "usage-band",
-  "version": "3.4.1",
+  "version": "3.5.0",
   "description": "Your Claude plan usage in one line above the prompt: 5-hour and weekly limits with reset times, context window, model and session cost.",
-  "author": { "name": "Khadeer Basha", "url": "https://github.com/KhadeerBasha1232" },
+  "author": {
+    "name": "Khadeer Basha",
+    "url": "https://github.com/KhadeerBasha1232"
+  },
   "homepage": "https://github.com/KhadeerBasha1232/claude-usage-mod",
   "repository": "https://github.com/KhadeerBasha1232/claude-usage-mod",
   "license": "MIT",
-  "keywords": ["usage", "rate-limits", "context", "status", "mod"],
+  "keywords": [
+    "usage",
+    "rate-limits",
+    "context",
+    "status",
+    "mod"
+  ],
   "userConfig": {
     "weekly_reset": {
       "type": "string",
       "title": "Weekly limit reset time (optional)",
       "description": "When your weekly limit resets, in your local time, e.g. \"Sat 14:30\" or \"Saturday 2:30 PM\" (see Claude Settings > Usage). Leave empty to detect it automatically.",
       "default": ""
+    },
+    "alerts": {
+      "type": "boolean",
+      "title": "Limit alerts",
+      "description": "Show a pop-up when the 5-hour or weekly limit reaches 80% and 95%, and when it resets.",
+      "default": true
+    },
+    "pace": {
+      "type": "boolean",
+      "title": "Pace warning",
+      "description": "Show ⚠ next to a limit you are using faster than its window is passing.",
+      "default": true
+    },
+    "compact_button": {
+      "type": "boolean",
+      "title": "Compact button",
+      "description": "Show a Compact button in the band when the context window is 85% full.",
+      "default": true
+    },
+    "reply_cost": {
+      "type": "boolean",
+      "title": "Last reply cost",
+      "description": "Show what the last reply cost next to the session cost, e.g. $13.24 (+$0.41).",
+      "default": true
+    },
+    "tooltips": {
+      "type": "boolean",
+      "title": "Tooltips",
+      "description": "In the desktop app, show details when you hover over a ring.",
+      "default": true
     }
   }
 }
