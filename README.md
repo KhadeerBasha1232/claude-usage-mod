@@ -3,15 +3,15 @@
 Your Claude plan usage, always visible: a one-line band **directly above the prompt** in Claude Code.
 
 ```
-◔ 5h 16% resets in 4h 12m    ◑ Week 50% resets Sat 2:29 PM    ○ Context 34% 340k / 1M    $11.15
+◔ 5h 20% resets in 57m  │  ◑ Week 50% resets Sat 2:30 PM  │  ○ Context 40% 404k / 1M  │  Opus 5.5 · $13.24
 ```
 
 - **5h**: your 5-hour session limit, with when it resets and how long until then
 - **Week**: your weekly limit, with its reset time
 - **Context**: how full this chat's context window is, in tokens
-- **Cost**: this session's cost at API prices (you aren't charged this on a Pro/Max plan)
+- **Model** and this session's **cost** at API prices (you aren't charged this on a Pro/Max plan)
 
-Each figure has a small progress ring (pie glyphs `○ ◔ ◑ ◕ ●` in the terminal) that turns **yellow at 70%** and **red at 90%**. The band updates live: every 15 seconds, after each step Claude takes, and after every reply. It always stays on one line: in a narrow window it drops the cost, then shortens the reset times, then drops the token count.
+Each figure has a small progress ring (pie glyphs `○ ◔ ◑ ◕ ●` in the terminal) that turns **yellow at 70%** and **red at 90%**. The band updates live: every 15 seconds, after each step Claude takes, and after every reply. It always stays on one line: in a narrow window it drops the cost, then shortens the reset times, then drops the token count, then the model.
 
 Works in the **Claude desktop app (Code tab)** on macOS and Windows, and in **`claude` in the terminal**.
 

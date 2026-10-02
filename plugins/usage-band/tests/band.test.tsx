@@ -6,7 +6,7 @@ const BAND = {
   props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 200 } as any,
 } as const
 
-test('engine limits show exact reset times, context and cost on one line', async ($, on) => {
+test('engine limits show exact reset times, context, model and cost on one line', async ($, on) => {
   const in2h = new Date(Date.now() + 2 * 3_600_000 + 60_000).toISOString()
   on('session.usage', () => ({
     value: {
@@ -29,7 +29,9 @@ test('engine limits show exact reset times, context and cost on one line', async
     expect(await ui.find({ type: 'Text', text: /^resets in 2h 1m$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^Week$/ })).toBeDefined()
     expect(await ui.find({ type: 'Text', text: /^82k \/ 200k$/ })).toBeDefined()
-    expect(await ui.find({ type: 'Text', text: /^\$2\.14$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^Opus 5\.5 · \$2\.14$/ })).toBeDefined()
+    // A divider between each of the three figures and before the model and cost.
+    expect((await ui.findAll({ type: 'Text', text: /^│$/ })).length).toBe(3)
     await ui.unmount()
   }
 })
@@ -169,7 +171,7 @@ test('a narrow band drops the cost and token counts instead of wrapping', async 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 50 } })
   expect(await ui.find({ type: 'Text', text: /^16%$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^34%$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^\$11\.15$/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /\$11\.15/ })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /^340k/ })).toBeUndefined()
   await ui.unmount()
 })

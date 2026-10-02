@@ -2,7 +2,7 @@ import type { Register } from 'claude-code'
 
 // One line above the prompt with every usage figure:
 //
-//   ◔ 5h 7% resets in 4h 39m    ◑ Week 46% resets Sat 2:30 PM    ○ Context 16% 164k / 1M    $2.14
+//   ◔ 5h 7% resets in 4h 39m  │  ◑ Week 46% resets Sat 2:30 PM  │  ○ Context 16% 164k / 1M  │  Opus 5.5 · $2.14
 //
 // The rings are SVG on the desktop and pie glyphs in the terminal.
 //
@@ -80,6 +80,13 @@ function compact(n: number) {
 
 // The next moment matching a weekly time such as "Sat 14:30", "saturday 2:30 pm"
 // or "Sat 2pm", in local time; undefined when the text doesn't read as one.
+function prettyModel(id: string) {
+  const m = id.replace(/\[.*\]$/, '').match(/claude-([a-z]+)-(\d+)(?:-(\d+))?/)
+  if (!m) return id
+  const name = m[1][0].toUpperCase() + m[1].slice(1)
+  return m[3] && m[3].length <= 2 ? `${name} ${m[2]}.${m[3]}` : `${name} ${m[2]}`
+}
+
 function nextConfiguredReset(text: string, now: number) {
   const m = text.trim().toLowerCase().match(/^([a-z]{3})[a-z]*\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/)
   if (!m) return undefined
@@ -238,6 +245,10 @@ export const register: Register = (on, options) => {
 
     const ctx = usage.context
     const cost = usage.cost?.usd
+    let model = ""
+    try {
+      model = prettyModel(await $.session.model())
+    } catch {}
 
     type Segment = { key: string; label: string; pct: number; details: string[] }
     const segments: Segment[] = []
@@ -273,36 +284,57 @@ export const register: Register = (on, options) => {
     }
 
     // Fit one line: drop the cost, then shorten the reset phrases, then drop the
-    // context tokens, then the reset phrases altogether.
-    const GAP = 4
+    // context tokens, then the model, then the reset phrases altogether.
+    const GAP = 2
+    const SEP_WIDTH = 1 + 2 * GAP
     const costText = cost != null ? `$${cost.toFixed(2)}` : ""
-    const width = (detailLevel: number, withCost: boolean, withTokens: boolean) =>
-      segments.reduce((sum, s, i) => {
-        const detail = s.key === "context" ? (withTokens ? s.details[0] ?? "" : "") : s.details[detailLevel] ?? ""
-        return sum + (i ? GAP : 0) + 2 + s.label.length + 1 + `${Math.round(s.pct)}%`.length + (detail ? 1 + detail.length : 0)
-      }, 0) + (withCost && costText ? GAP + costText.length : 0) + 2
+    type Plan = { detail: number; cost: boolean; tokens: boolean; model: boolean }
+    const tailText = (p: Plan) => [p.model ? model : "", p.cost ? costText : ""].filter(Boolean).join(" · ")
+    const width = (p: Plan) => {
+      const segs = segments.reduce((sum, s, i) => {
+        const detail = s.key === "context" ? (p.tokens ? s.details[0] ?? "" : "") : s.details[p.detail] ?? ""
+        return sum + (i ? SEP_WIDTH : 0) + 2 + s.label.length + 1 + `${Math.round(s.pct)}%`.length + (detail ? 1 + detail.length : 0)
+      }, 0)
+      const tail = tailText(p)
+      return segs + (tail ? SEP_WIDTH + tail.length : 0) + 2
+    }
     const cols = e.props.bodyColumns ?? 200
-    const plans: Array<[number, boolean, boolean]> = [[0, true, true], [0, false, true], [1, false, true], [1, false, false], [2, false, false]]
-    const [detailLevel, withCost, withTokens] = plans.find(([d, c, t]) => width(d, c, t) <= cols) ?? plans[plans.length - 1]
+    const plans: Plan[] = [
+      { detail: 0, cost: true, tokens: true, model: true },
+      { detail: 0, cost: false, tokens: true, model: true },
+      { detail: 1, cost: false, tokens: true, model: true },
+      { detail: 1, cost: false, tokens: false, model: true },
+      { detail: 1, cost: false, tokens: false, model: false },
+      { detail: 2, cost: false, tokens: false, model: false },
+    ]
+    const plan = plans.find(p => width(p) <= cols) ?? plans[plans.length - 1]
 
     const Svg = e.surface === "desktop" ? els.Svg : undefined
+    // A quiet grey divider; dimColor alone tints oddly on some surfaces.
+    const sep = (key: string) => <Text key={key} color="#6e7681">│</Text>
 
-    const parts = segments.map(s => {
+    const parts: any[] = []
+    segments.forEach((s, i) => {
       const color = colorFor(s.pct)
-      const detail = s.key === "context" ? (withTokens ? s.details[0] : undefined) : s.details[detailLevel]
+      const detail = s.key === "context" ? (plan.tokens ? s.details[0] : undefined) : s.details[plan.detail]
       const ring = Svg
         ? <Svg key="ring" source={ringSvg(s.pct)} alt={`${s.label} ${Math.round(s.pct)}% used`} width={14} height={14} />
         : <Text key="ring" color={color}>{pieGlyph(s.pct)}</Text>
-      return (
+      if (i) parts.push(sep(`sep-${s.key}`))
+      parts.push(
         <Box key={s.key} flexDirection="row" gap={1} flexShrink={0} alignItems="center">
           {ring}
           <Text dimColor>{s.label}</Text>
           <Text color={color} bold>{`${Math.round(s.pct)}%`}</Text>
           {detail ? <Text dimColor>{detail}</Text> : null}
-        </Box>
+        </Box>,
       )
     })
-    if (withCost && costText) parts.push(<Text key="cost" dimColor wrap="truncate-end">{costText}</Text>)
+    const tail = tailText(plan)
+    if (tail) {
+      parts.push(sep("sep-tail"))
+      parts.push(<Text key="tail" dimColor wrap="truncate-end">{tail}</Text>)
+    }
 
     return (
       <Box flexDirection="row" flexWrap="nowrap" justifyContent="center" alignItems="center" width="100%" gap={GAP} paddingX={1} overflow="hidden">
