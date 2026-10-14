@@ -21,7 +21,7 @@ It also helps you stay ahead of your limits:
 
 Each of these can be turned off in [Settings](#settings).
 
-Each figure has a small progress ring (pie glyphs `○ ◔ ◑ ◕ ●` in the terminal) that turns **yellow at 70%** and **red at 90%**. The band updates live: every 15 seconds, after each step Claude takes, and after every reply. It always stays on one line: in a narrow window it shortens the reset times to `↻ 1:19 PM`, then drops the token count, then the model. The cost always stays.
+Each figure has a small progress ring (pie glyphs `○ ◔ ◑ ◕ ●` in the terminal) that turns **yellow at 70%** and **red at 90%**. The band updates live: every 15 seconds, after each step Claude takes, and after every reply. It always shows every figure on one line: in a narrow window it writes the reset times as `↻ 1:19 PM`, tightens the spacing, and shortens the labels to `Wk` and `Ctx`. Nothing is hidden.
 
 Works in the **Claude desktop app (Code tab)** on macOS and Windows, and in **`claude` in the terminal**.
 

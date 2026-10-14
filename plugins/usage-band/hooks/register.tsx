@@ -442,32 +442,36 @@ export const register: Register = (on, options) => {
       )
     }
 
-    // Fit one line, always keeping the cost: shorten the reset phrases to "↻",
-    // then drop the context tokens, then the model, then the reset phrases.
-    const GAP = 2
-    const SEP_WIDTH = 1 + 2 * GAP
+    // Show everything, always, on one line. To fit a narrow window, write
+    // "resets" as "↻" (the time stays), then tighten the spacing, then shorten
+    // the labels ("Wk", "Ctx") and the token count; every figure stays.
     const replyCost = showReplyCost && lastReplyCost != null && lastReplyCost >= 0.005 ? ` (+$${lastReplyCost.toFixed(2)})` : ""
     const costText = cost != null ? `$${cost.toFixed(2)}${replyCost}` : ""
-    const COMPACT_WIDTH = "Compact".length + GAP
-    type Plan = { detail: number; cost: boolean; tokens: boolean; model: boolean }
-    const tailText = (p: Plan) => [p.model ? model : "", p.cost ? costText : ""].filter(Boolean).join(" · ")
+    type Plan = { detail: number; gap: number; short: boolean }
+    const SHORT_LABELS: Record<string, string> = { Week: "Wk", Context: "Ctx" }
+    const labelFor = (s: Segment, p: Plan) => (p.short ? SHORT_LABELS[s.label] ?? s.label : s.label)
+    const detailFor = (s: Segment, p: Plan) =>
+      s.key === "context" ? (p.short ? s.details[0]?.replace(/ \/ /, "/") : s.details[0]) : s.details[p.detail]
+    const tailFor = (p: Plan) => [model, costText].filter(Boolean).join(p.short ? "·" : " · ")
     const width = (p: Plan) => {
+      const sepWidth = 1 + 2 * p.gap
       const segs = segments.reduce((sum, s, i) => {
-        const detail = s.key === "context" ? (p.tokens ? s.details[0] ?? "" : "") : s.details[p.detail] ?? ""
-        return sum + (i ? SEP_WIDTH : 0) + 2 + s.label.length + 1 + `${Math.round(s.pct)}%`.length + (s.ahead ? 2 : 0) + (detail ? 1 + detail.length : 0)
+        const detail = detailFor(s, p) ?? ""
+        return sum + (i ? sepWidth : 0) + 2 + labelFor(s, p).length + 1 + `${Math.round(s.pct)}%`.length + (s.ahead ? 2 : 0) + (detail ? 1 + detail.length : 0)
       }, 0)
-      const tail = tailText(p)
-      return segs + (offerCompact ? COMPACT_WIDTH : 0) + (tail ? SEP_WIDTH + tail.length : 0) + 2
+      const tail = tailFor(p)
+      return segs + (offerCompact ? "Compact".length + 1 : 0) + (tail ? sepWidth + tail.length : 0) + 2
     }
     const cols = e.props.bodyColumns ?? 200
     const plans: Plan[] = [
-      { detail: 0, cost: true, tokens: true, model: true },
-      { detail: 1, cost: true, tokens: true, model: true },
-      { detail: 1, cost: true, tokens: false, model: true },
-      { detail: 1, cost: true, tokens: false, model: false },
-      { detail: 2, cost: true, tokens: false, model: false },
+      { detail: 0, gap: 2, short: false },
+      { detail: 1, gap: 2, short: false },
+      { detail: 1, gap: 1, short: false },
+      { detail: 1, gap: 1, short: true },
     ]
     const plan = plans.find(p => width(p) <= cols) ?? plans[plans.length - 1]
+    const GAP = plan.gap
+    const tail = tailFor(plan)
 
     const Svg = e.surface === "desktop" ? els.Svg : undefined
     // A quiet grey divider; dimColor alone tints oddly on some surfaces.
@@ -477,15 +481,15 @@ export const register: Register = (on, options) => {
     const parts: any[] = []
     segments.forEach((s, i) => {
       const color = colorFor(s.pct)
-      const detail = s.key === "context" ? (plan.tokens ? s.details[0] : undefined) : s.details[plan.detail]
+      const detail = detailFor(s, plan)
       const ring = Svg
-        ? <Svg key="ring" source={ringSvg(s.pct)} alt={s.tooltip} width={14} height={14} />
+        ? <Svg key="ring" source={ringSvg(s.pct)} alt={s.tooltip} width={12} height={12} />
         : <Text key="ring" color={color}>{pieGlyph(s.pct)}</Text>
       if (i) parts.push(sep(`sep-${s.key}`))
       parts.push(
         <Box key={s.key} flexDirection="row" gap={1} flexShrink={0} alignItems="center">
           {ring}
-          <Text dimColor>{s.label}</Text>
+          <Text dimColor>{labelFor(s, plan)}</Text>
           <Text color={color} bold>{`${Math.round(s.pct)}%`}</Text>
           {s.ahead ? <Text key="ahead" color="yellow">⚠</Text> : null}
           {detail ? <Text dimColor>{detail}</Text> : null}
@@ -495,14 +499,13 @@ export const register: Register = (on, options) => {
         </Box>,
       )
     })
-    const tail = tailText(plan)
     if (tail) {
       parts.push(sep("sep-tail"))
-      parts.push(<Text key="tail" dimColor wrap="truncate-end">{tail}</Text>)
+      parts.push(<Text key="tail" dimColor>{tail}</Text>)
     }
 
     return (
-      <Box flexDirection="row" flexWrap="nowrap" justifyContent="center" alignItems="center" width="100%" gap={GAP} paddingX={1} overflow="hidden">
+      <Box flexDirection="row" flexWrap="nowrap" justifyContent="center" alignItems="center" width="100%" gap={GAP} paddingX={1}>
         {parts}
       </Box>
     )

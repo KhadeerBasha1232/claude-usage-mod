@@ -160,7 +160,7 @@ test('without the option, the weekly reset is detected from the last drop', asyn
   await ui.unmount()
 })
 
-test('a narrow band keeps the cost and drops the token count instead of wrapping', async ($, on) => {
+test('a narrow band shortens labels but keeps every figure on one line', async ($, on) => {
   on('session.usage', () => ({
     value: {
       startedAt: 0,
@@ -172,13 +172,19 @@ test('a narrow band keeps the cost and drops the token count instead of wrapping
       cost: { usd: 11.15 },
     },
   }))
+  on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('ui.render', () => null as any)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop', props: { ...BAND.props, bodyColumns: 50 } })
   expect(await ui.find({ type: 'Text', text: /^16%$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^34%$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /\$11\.15/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^340k/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^340k\/1M$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Opus 5\.5·\$11\.15$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Wk$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^Ctx$/ })).toBeDefined()
+  // Both reset times are still there, just marked "↻".
+  expect((await ui.findAll({ type: 'Text', text: /^↻ / })).length).toBe(2)
   await ui.unmount()
 })
 
@@ -368,7 +374,7 @@ test('a context over 70% full offers a Compact button that compacts', async ($, 
   STORE(on)
   let compacted = 0
   let percent = 72
-  on('session.compact', () => (compacted++, { value: {} }) as any)
+  on('session.compact', () => (compacted++, { skip: 'test' }) as any)
   on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: percent * 10000, window: 1000000, percent }, rateLimits: [] } }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('ui.render', () => null as any)
